@@ -44,14 +44,19 @@ static int send_mcu_cmd(int fd, char read_buf[], char write_buf[], const int wri
 	ret = read(fd, read_buf, 16);
 	if (ret < 0)
 		return -1;
+
+	for (i = 0; i < ret; i++)
+		printf("%02x ", read_buf[i]);
+	printf("\n");
+
 	return 0;
 }
 
 void usage(FILE *fp)
 {
 	fprintf(fp, "Usage:\n");
-	fprintf(fp, "	mx-mcu-ctl <OPTIONS>\n");
-	fprintf(fp, "OPTIONS:\n");
+	fprintf(fp, "	mx-mcu-ctl [Options]...\n");
+	fprintf(fp, "Options:\n");
 	fprintf(fp, "	-m, --mode [active|sleep|hibernate]\n");
 	fprintf(fp, "		Set power management mode\n");
 	fprintf(fp, "	-r, --red-led [on|off]\n");
@@ -152,10 +157,6 @@ int main(int argc, char *argv[])
 			exit(99);
 		}
 	}
-
-	for (i = 0; i < strlen(read_buf); i++)
-		printf("%02x ", read_buf[i]);
-	printf("\n");
 
 	close(fd);
 	return 0;
