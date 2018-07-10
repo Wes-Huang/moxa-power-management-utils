@@ -1,0 +1,148 @@
+#!/bin/bash
+#
+# SPDX-License-Identifier: Apache-2.0
+# 
+# Authors:
+# 	2018	Wes Huang	<Wes.Huang@moxa.com>
+
+timestamp_from_rtc_get() {   
+	local timestamp=""
+
+	timestamp="$(sudo hwclock -D)"  
+	timestamp=${timestamp##*= } 
+	timestamp=${timestamp%% seconds*} 
+	echo ${timestamp}
+}
+
+timestamp_from_rtc_get
+
+# usage menu
+usage(){
+	echo -e "Usage:"
+	echo -e "	./octopus [OPTIONS]..."
+	echo -e "Options:"
+	echo -e "	-m, --menu		Show the configuration menu."
+	echo -e "	-s, --start		Start to run all the test cases."
+	echo -e "	-i, --info		Show the DUT's test information."
+	echo -e "	-l, --list		Show the test DUT list."
+	echo -e "	-S, --stop [Num]	Stop the test DUT."
+	echo -e "	-f, --follow [Num]	Following the specific DUT's log message."
+	echo -e "	-p, --print [Num]	Show the specific DUT's log message."
+	echo -e "	--save			Save the .config file to configs folder. File name is CONFIG_NAME."
+	echo -e "	--load [file name]	Load config file from configs folder."
+	echo -e "	-D, --delete [Num]	Delete the specific DUT's log message"
+	echo -e "	-v, --version		output version information and exit."
+
+	exit 99
+}
+
+set_rtc_counter() {
+	local timestamp=${1}
+	local i2c_bus="0"
+	local rtc_addr="0x68"
+	local counter0_addr="0x04"
+	local counter1_addr="0x05"
+	local counter2_addr="0x06"
+	local control_addr="0x07"
+	local status_addr="0x08"
+	local trickle_addr="0x09"
+	
+	local timestamp_hex="$(echo "obase=16; ${timestamp}" | bc)"
+	local len="$(echo ${#timestamp_hex})"
+	local timestamp_swap=""
+
+	echo "timestamp = ${timestamp}"
+	echo "timestamp_hex = ${timestamp_hex}"
+	echo "timestamp_swap = ${timestamp_swap}"
+
+	if [ $[$len%2] -eq 0 ]; then
+		for ((i=$((len - 2)); i>=0; i=$((i - 2))))
+		do
+			timestamp_swap="${timestamp_swap}${timestamp_hex:${i}:2}"
+		done
+	else
+		if [ X"${len}" == X"1" ]; then
+			timestamp_swap="${timestamp_swap}${timestamp_hex:0:1}"
+		else
+			for ((i=$((len - 2)); i>=-1; i=((i - 2))))
+			do
+				if [ X"${i}" == X"-1" ]; then
+					timestamp_swap="${timestamp_swap}${timestamp_hex:0:1}"
+				else
+					timestamp_swap="${timestamp_swap}${timestamp_hex:${i}:2}"
+				fi
+			done
+		fi
+	fi
+
+	echo "timestamp_swap = ${timestamp_swap}"
+
+	# stop wdt
+	i2cset -f -y ${i2c_bus} ${rtc_addr} ${control_addr} "0x09"
+	# enter standby current
+	i2cset -f -y ${i2c_bus} ${rtc_addr} ${trickle_addr} "0x09"
+	# read status
+	i2cget -f -y ${i2c_bus} ${rtc_addr} ${status_addr}
+	# clear AF bit
+	i2cset -f -y ${i2c_bus} ${rtc_addr} ${status_addr} "0x00"
+
+	# configure counter
+	if [ X"${timestamp_swap:0:2}" != X"" ]; then
+		i2cset -f -y ${i2c_bus} ${rtc_addr} ${counter0_addr} "0x${timestamp_swap:0:2}"
+	else
+		i2cset -f -y ${i2c_bus} ${rtc_addr} ${counter0_addr} "0x00"
+	fi
+	if [ X"${timestamp_swap:2:2}" != X"" ]; then
+		i2cset -f -y ${i2c_bus} ${rtc_addr} ${counter1_addr} "0x${timestamp_swap:2:2}"
+	else
+		i2cset -f -y ${i2c_bus} ${rtc_addr} ${counter1_addr} "0x00"
+	fi
+	if [ X"${timestamp_swap:4:2}" != X"" ]; then
+		i2cset -f -y ${i2c_bus} ${rtc_addr} ${counter2_addr} "0x${timestamp_swap:4:2}"
+	else
+		i2cset -f -y ${i2c_bus} ${rtc_addr} ${counter1_addr} "0x00"
+	fi
+	i2cset -f -y ${i2c_bus} ${rtc_addr} ${control_addr} "0x49"
+}
+
+main() {
+	case "${1}" in
+		--set-mode)
+			exit 0
+			;;
+		--get-mode)
+			exit 0
+			;;
+		--set-system-red-led)
+			exit 0
+			;;
+		--get-system-red-led)
+			exit 0
+			;;
+		--get-version1)
+			exit 0
+			;;
+		--get-version2)
+			exit 0
+			;;
+		--get-wakeup-mode)
+			exit 0
+			;;
+		--set-rtc-counter)
+			set_rtc_counter ${2}
+			exit 0
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		*)
+			usage
+			break
+			;;
+	esac
+}
+
+main ${1} ${2}
+
+exit 0

@@ -1,0 +1,11 @@
+[Unit]
+Description=Moxa MCU daemon
+Before=rc.local.service
+
+[Service]
+ExecStart=/sbin/moxa-mcud
+ExecStop=/usr/bin/pkill moxa-mcud
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target poweroff.target

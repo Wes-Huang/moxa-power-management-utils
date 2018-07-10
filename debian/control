@@ -1,0 +1,12 @@
+Source: moxa-power-management-utils
+Section: utils
+Priority: required
+Maintainer: Wes Huang <Wes.Huang@moxa.com>
+Build-Depends: debhelper (>= 10),
+Standards-Version: 4.1.2
+Homepage: http://www.moxa.com/
+
+Package: moxa-power-management-utils
+Architecture: any
+Depends: ${misc:Depends}, bc, i2c-tools, moxa-msp340-bsl-scripter, moxa-am335x-mdio-control 
+Description: Moxa MCU control utility

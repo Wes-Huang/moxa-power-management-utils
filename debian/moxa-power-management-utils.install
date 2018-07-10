@@ -1,0 +1,5 @@
+power-management/sbin/* /sbin
+power-management/etc/mcu-msp340/* /etc/mcu-msp340
+moxa-mcud /sbin
+mx-mcu-ctl /sbin
+moxa-mcud.service /lib/systemd/system/multi-user.target.wants/

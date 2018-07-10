@@ -1,0 +1,47 @@
+#!/bin/sh
+## For control MCU to enter BSL mode
+#  Control Reset and Test Pin
+
+RST=496
+
+GPIO=/sys/class/gpio
+
+RST_VALUE=${GPIO}/gpio${RST}/value
+RST_DIRECT=${GPIO}/gpio${RST}/direction
+
+
+[ -f ${RST_VALUE} ] || sh -c "echo ${RST} > ${GPIO}/export"
+
+RST_DIRECTION_GPIO=`cat $RST_DIRECT`
+if [ $RST_DIRECTION_GPIO != "out" ]; then
+	echo out > $RST_DIRECT
+fi
+
+TEST=497
+TEST_VALUE=${GPIO}/gpio${TEST}/value
+TEST_DIRECT=${GPIO}/gpio${TEST}/direction
+
+
+[ -f ${TEST_VALUE} ] || sh -c "echo ${TEST} > ${GPIO}/export"
+
+TEST_DIRECTION_GPIO=`cat $TEST_DIRECT`
+if [ $TEST_DIRECTION_GPIO != "out" ]; then
+	echo out > $TEST_DIRECT
+fi
+
+echo 0 > ${TEST_VALUE}
+sleep 0.050
+echo 1 > ${RST_VALUE}
+sleep 2.100
+echo 1 > ${TEST_VALUE}
+sleep 0.010
+echo 0 > ${TEST_VALUE}
+sleep 0.001
+echo 1 > ${TEST_VALUE}
+sleep 0.01
+echo 0 > ${RST_VALUE}
+sleep 0.01
+echo 0 > ${TEST_VALUE}
+echo "Enter BSL mode"
+
+exit 0
