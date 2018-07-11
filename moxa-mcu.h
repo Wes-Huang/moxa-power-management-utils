@@ -4,6 +4,9 @@
 #define MCUD_SOCKET "/tmp/mcud_socket"
 #define MCU_PORT "/dev/ttyS2"
 #define BUFF_LEN 16
+#define MAXLINE 128
+#define TIMEOUT 1
+#define SLEEP_WAKE_UP "/sbin/mx-power-mgmt -w"
 
 #define SET_ACTIVE_MODE		"\xf0\x02\xc2\xa0\x62"
 #define SET_SLEEP_MODE		"\xf0\x02\xc2\xa1\x63"

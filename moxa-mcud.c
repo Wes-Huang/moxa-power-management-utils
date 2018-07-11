@@ -14,8 +14,6 @@
 
 #include "moxa-mcu.h"
 
-#define TIMEOUT 1
-
 struct mcu_struct {
 	int mcu_fd;
 	int server_fd;
