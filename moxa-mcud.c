@@ -24,6 +24,21 @@ struct mcu_struct {
 
 pthread_mutex_t mcu_mutex;
 
+static int exec_cmd (char *ret_msg, char *cmd)
+{
+	FILE *fp;
+	char command[MAXLINE];
+	memset(command, '\0', MAXLINE);
+	snprintf(command, sizeof(command), cmd);
+	fp = popen(command, "r");
+	if(NULL == fp) {
+		perror("Cannot execute command \n");
+		exit(1);
+	}
+	fgets(ret_msg, MAXLINE, fp);
+	return pclose(fp);
+}
+
 static int init_tty(int fd)
 {
 	struct termios tmio;
