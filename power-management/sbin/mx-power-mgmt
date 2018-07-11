@@ -5,34 +5,27 @@
 # Authors:
 # 	2018	Wes Huang	<Wes.Huang@moxa.com>
 
-timestamp_from_rtc_get() {   
-	local timestamp=""
-
-	timestamp="$(sudo hwclock -D)"  
-	timestamp=${timestamp##*= } 
-	timestamp=${timestamp%% seconds*} 
-	echo ${timestamp}
-}
-
-timestamp_from_rtc_get
-
 # usage menu
 usage(){
 	echo -e "Usage:"
 	echo -e "	./octopus [OPTIONS]..."
 	echo -e "Options:"
-	echo -e "	-m, --menu		Show the configuration menu."
-	echo -e "	-s, --start		Start to run all the test cases."
-	echo -e "	-i, --info		Show the DUT's test information."
-	echo -e "	-l, --list		Show the test DUT list."
-	echo -e "	-S, --stop [Num]	Stop the test DUT."
-	echo -e "	-f, --follow [Num]	Following the specific DUT's log message."
-	echo -e "	-p, --print [Num]	Show the specific DUT's log message."
-	echo -e "	--save			Save the .config file to configs folder. File name is CONFIG_NAME."
-	echo -e "	--load [file name]	Load config file from configs folder."
-	echo -e "	-D, --delete [Num]	Delete the specific DUT's log message"
-	echo -e "	-v, --version		output version information and exit."
-
+	echo -e "	-m, --mode [active|sleep|hibernate]"
+	echo -e "	        Set power management mode"
+	echo -e "	-r, --red-led [on|off]"
+	echo -e "	        Set MCU red led"
+	echo -e "	-g, --green-led [on|off]"
+	echo -e "	        Set MCU green led"
+	echo -e "	-v, -version"
+	echo -e "		Show MCU firmware version"
+	echo -e "	-h, --help"
+	echo -e "	        Show the usage manual"
+	echo -e "       -w, --wake"
+        echo -e "               Wake up from sleep mode"
+        echo -e "       --phy-off"
+        echo -e "               Power off ethernet phy"
+        echo -e "       --phy-on"
+        echo -e "               Power on ethernet phy"
 	exit 99
 }
 
@@ -46,14 +39,20 @@ set_rtc_counter() {
 	local control_addr="0x07"
 	local status_addr="0x08"
 	local trickle_addr="0x09"
-	
 	local timestamp_hex="$(echo "obase=16; ${timestamp}" | bc)"
 	local len="$(echo ${#timestamp_hex})"
 	local timestamp_swap=""
 
-	echo "timestamp = ${timestamp}"
-	echo "timestamp_hex = ${timestamp_hex}"
-	echo "timestamp_swap = ${timestamp_swap}"
+	if [ "${timestamp}" -gt 20 ] && [ "${timestamp}" -lt 604801 ] 2>/dev/null ;then
+		echo "${timestamp} is number."
+	else
+		echo "${timestamp} is a illegal number."
+		exit 99
+	fi
+
+#	echo "timestamp = ${timestamp}"
+#	echo "timestamp_hex = ${timestamp_hex}"
+#	echo "timestamp_swap = ${timestamp_swap}"
 
 	if [ $[$len%2] -eq 0 ]; then
 		for ((i=$((len - 2)); i>=0; i=$((i - 2))))
@@ -75,7 +74,7 @@ set_rtc_counter() {
 		fi
 	fi
 
-	echo "timestamp_swap = ${timestamp_swap}"
+#	echo "timestamp_swap = ${timestamp_swap}"
 
 	# stop wdt
 	i2cset -f -y ${i2c_bus} ${rtc_addr} ${control_addr} "0x09"
@@ -105,35 +104,164 @@ set_rtc_counter() {
 	i2cset -f -y ${i2c_bus} ${rtc_addr} ${control_addr} "0x49"
 }
 
+set_sleep() {
+	# set AM335x SoC to powersave low frequency low power mode.
+	echo powersave > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
+
+	# Disconnect USB bus 2 devices (USB hub, USB storage and UART)
+	echo 2-1 > /sys/bus/usb/drivers/usb/unbind
+
+	# turn off cellular usb function and let it into serial mode
+	echo 1 > /sys/class/gpio/gpio90/value
+
+#	systemctl start moxa_mdio.service
+	nohup mx-power-mgmt "--phy-off" &
+}
+
+restore_sleep() {
+	# set AM335x SoC to performance high frequency normal power mode.
+        echo performance > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
+
+        # Bind USB bus 2 devices (USB hub, USB storage and UART)
+        echo 2-1 > /sys/bus/usb/drivers/usb/bind
+
+	# turn on cellular usb function
+	echo 0 > /sys/class/gpio/gpio90/value
+
+#	systemctl stop moxa_mdio.service
+	nohup mx-power-mgmt "--phy-up" &
+}
+
+sleep_mode() {
+	local option="${1}"
+	local timestamp="${2}"
+
+	case "${option}" in
+		-s|--set-time)
+			set_rtc_counter ${timestamp}
+			mx-mcu-ctl -m "sleep"
+			set_sleep
+			exit 0
+			;;
+		-S|--SMS)
+			echo
+			;;
+		*)
+			usage
+			exit 0
+			;;
+	esac
+}
+
+hibernate_mode() {
+	local option="${1}"
+	local timestamp="${2}"
+
+	case "${option}" in
+		-s|--set-time)
+			set_rtc_counter ${timestamp}
+			mx-mcu-ctl -m "hibernate"
+			exit 0
+			;;
+		*)
+			usage
+			exit 0
+			;;
+	esac
+}
+
+mode_control() {
+	local mode="${1}"
+	local option="${2}"
+	local val="${3}"
+
+	case "${mode}" in
+		active)
+			active_mode ${option} ${val}
+			exit 0
+		;;
+		sleep)
+			sleep_mode ${option} ${val}
+			exit 0
+		;;
+		hibernate)
+			hibernate_mode ${option} ${val}
+			exit 0
+		;;
+		*)
+			usage
+			exit 0
+		;;
+	esac
+}
+
+mcu_version() {
+	local a_version=$(mx-mcu-ctl -a | awk '{print $4}')
+	local b_version=$(mx-mcu-ctl -b | awk '{print $4}')
+	local version="${a_version}${b_version}"
+
+	echo "MCU firmware version v${version:0:1}.${version:1:1}.${version:2:1}S0${version:3:1}"
+}
+
+wake_control() {
+	local mode="${1}"
+	local option="${2}"
+	local val="${3}"
+
+	restore_sleep
+}
+
+phy_off() {
+	# Power off eth0 and eth1 ethernet phy
+	mx-am335x-mdio-ctl "w" "0x04" "0x00" "0x0800"
+	mx-am335x-mdio-ctl "w" "0x05" "0x00" "0x0800"
+}
+
+phy_up() {
+        # Power off eth0 and eth1 ethernet phy
+        mx-am335x-mdio-ctl "w" "0x04" "0x00" "0x0000"
+        mx-am335x-mdio-ctl "w" "0x05" "0x00" "0x0000"
+	mx-am335x-mdio-ctl "w" "0x04" "0x13" "0x10"
+	mx-am335x-mdio-ctl "w" "0x05" "0x13" "0x10"
+}
+
 main() {
-	case "${1}" in
-		--set-mode)
+	local option1=${1}
+	local val1=${2}
+	local option2=${3}
+	local val2=${4}
+
+	case "${option1}" in
+		-m|--mode)
+			mode_control ${val1} ${option2} ${val2}
 			exit 0
 			;;
-		--get-mode)
+		-r|--red-led)
+			mx-mcu-ctl ${option1} ${val1}
 			exit 0
 			;;
-		--set-system-red-led)
+		-g|--green-led)
+			mx-mcu-ctl ${option1} ${val1}
 			exit 0
 			;;
-		--get-system-red-led)
-			exit 0
-			;;
-		--get-version1)
-			exit 0
-			;;
-		--get-version2)
-			exit 0
-			;;
-		--get-wakeup-mode)
-			exit 0
-			;;
-		--set-rtc-counter)
-			set_rtc_counter ${2}
+		-v|--version)
+			mcu_version
 			exit 0
 			;;
 		-h|--help)
 			usage
+			exit 0
+			;;
+		-w|--wake)
+			wake_control ${val1}
+			exit 0
+			;;
+		--phy-off)
+			phy_off
+			exit 0
+			;;
+		--phy-up)
+			phy_up
 			exit 0
 			;;
 		*)
@@ -143,6 +271,6 @@ main() {
 	esac
 }
 
-main ${1} ${2}
+main ${1} ${2} ${3} ${4}
 
 exit 0
