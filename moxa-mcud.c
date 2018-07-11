@@ -277,6 +277,9 @@ static void wait_event(struct mcu_struct *mcu)
 {
 	int ret;
 	char buffer[BUFF_LEN];
+	int cmd_ret;
+	char cmd[] = WAKE_UP_EXE;
+	char msg[MAXLINE];
 
 	while (mcu->running) {
 		pthread_mutex_lock(&mcu_mutex);
@@ -287,6 +290,11 @@ static void wait_event(struct mcu_struct *mcu)
 			// Handle cmd
 			printf("Interrupt!!!\n");
 			print_cmd(buffer, ret);
+			if (buffer[3] == 178) {
+				printf("RTC wake up!\n");
+				cmd_ret = exec_cmd(msg, cmd);
+				printf("result = %s\n", msg);
+			}
 			printf("--------------------\n");
 			continue;
 		}
